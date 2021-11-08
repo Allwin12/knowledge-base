@@ -14,7 +14,7 @@ class TestUser(APITestCase):
         """
         response = self.client.get(path='/user/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, [])
+        self.assertEqual(response.data['results'], [])
 
     def test_add_new_user(self):
         """
@@ -58,7 +58,7 @@ class TestUser(APITestCase):
         self.assertEqual(response.status_code, 201)
         response = self.client.get(path='/user/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
+        self.assertEqual(len(response.data['results']), 1)
 
 
 class TestAccessToken(APITestCase):

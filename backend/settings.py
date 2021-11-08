@@ -45,7 +45,8 @@ CUSTOM_APPS = [
 THIRD_PARTY_APPS = [
     'drf_yasg',
     'django_elasticsearch_dsl',
-    'oauth2_provider'
+    'oauth2_provider',
+    'django_extensions'
 ]
 
 INSTALLED_APPS += CUSTOM_APPS + THIRD_PARTY_APPS

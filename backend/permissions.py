@@ -11,6 +11,9 @@ class IsAuthor(BasePermission):
         :param view:
         :return:
         """
-        if request.user.is_authenticated and request.user.role == User.AUTHOR:
+        if request.method == 'GET':
             return True
-        raise exceptions.PermissionDenied(detail="Only author can perform this operation!")
+        else:
+            if request.user.is_authenticated and request.user.role == User.AUTHOR:
+                return True
+            raise exceptions.PermissionDenied(detail="Only author can perform this operation!")

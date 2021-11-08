@@ -9,7 +9,7 @@ from backend.permissions import IsAuthor
 from backend.swagger_utils import RequiredQueryParam
 from .documents import CategoryDocument
 from .models import Category, DocumentFile, KnowledgeBase
-from .serializers import CategorySerializer, DocumentViewSerializer, KnowledgeBaseSerializer
+from .serializers import CategorySerializer, DocumentViewSerializer, KnowledgeBaseSerializer, CategoryDetailSerializer
 from .utils import FileUtil
 
 
@@ -41,6 +41,7 @@ def get_validation_error_schema():
 class KnowledgeBaseView(GenericAPIView):
     serializer_class = KnowledgeBaseSerializer
     model = KnowledgeBase
+    permission_classes = [IsAuthor]
 
     @swagger_auto_schema(tags=['Knowledge Base'], operation_summary="Add New Knowledge Base",
                          responses={422: get_validation_error_schema()})
@@ -87,6 +88,19 @@ class CategoryView(GenericAPIView):
         return self.get_paginated_response(self.paginate_queryset(self.serializer_class(categories, many=True).data))
 
 
+class CategoryDetailView(GenericAPIView):
+    model = Category
+    serializer_class = CategoryDetailSerializer
+
+    @swagger_auto_schema(tags=['Document'], operation_summary="Category Details")
+    def get(self, request, category_id):
+        try:
+            category = self.model.objects.get(pk=category_id)
+        except self.model.DoesNotExist:
+            return Response({"error": "Category not found!"}, status=404)
+        return Response(self.serializer_class(category).data, status=200)
+
+
 class DocumentUploadView(GenericAPIView):
     serializer_class = None
     parser_classes = (MultiPartParser,)
@@ -99,7 +113,7 @@ class DocumentUploadView(GenericAPIView):
         category = request.data.get('category')
         for file in files:
             FileUtil(file).parse_file(category)
-        return Response(status=200)
+        return Response('Upload successful', status=200)
 
 
 class DocumentView(GenericAPIView):
@@ -107,15 +121,14 @@ class DocumentView(GenericAPIView):
     serializer_class = DocumentViewSerializer
     permission_classes = [IsAuthor]
 
-    @swagger_auto_schema(operation_summary="Upload Document", tags=['Document'])
+    params = RequiredQueryParam([('search', str, 'search keyword')]).params
+
+    @swagger_auto_schema(manual_parameters=params, operation_summary="Document Search", tags=['Document'])
     def get(self, request):
-        doc_type = request.GET.get('doc_type')
         search = request.GET.get('search')
         elastic_search = request.GET.get('es', False)
 
         documents = self.model_class.objects.all()
-        if doc_type:
-            documents = documents.filter(doc_type=doc_type)
         if search:
             if elastic_search:
                 query = {
@@ -125,9 +138,33 @@ class DocumentView(GenericAPIView):
                         "type": "phrase_prefix"
                     }
                 }
-                documents = CategoryDocument.search().query(query).sort('-id').to_queryset()
+                documents = CategoryDocument.search().query(query).extra(size=documents.count()).sort(
+                    '-id').to_queryset()
             else:
                 documents = documents.filter(Q(doc_type__icontains=search) | Q(doc_id__icontains=search) |
                                              Q(title__icontains=search) | Q(content__icontains=search) |
                                              Q(question__icontains=search) | Q(answer__icontains=search))
+        return self.get_paginated_response(self.paginate_queryset(self.serializer_class(documents, many=True).data))
+
+
+class DocumentFilterView(GenericAPIView):
+    model_class = DocumentFile
+    serializer_class = DocumentViewSerializer
+
+    params = RequiredQueryParam([('doc_type', str, 'Document Type'), ('doc_id', str, 'Document ID'),
+                                 ('category_id', str, 'comma separated category ids')]).params
+
+    @swagger_auto_schema(manual_parameters=params, operation_summary="Document Filter", tags=['Document'])
+    def get(self, request):
+        doc_type = request.GET.get('doc_type')
+        doc_id = request.GET.get('doc_id')
+        category_id = request.GET.get('category_id')
+        documents = self.model_class.objects.all()
+        if doc_type:
+            documents = documents.filter(doc_type=doc_type)
+        if doc_id:
+            documents = documents.filter(doc_id__icontains=doc_id)
+        if category_id:
+            category_id = category_id.split(',')
+            documents = documents.filter(category_id__in=category_id)
         return self.get_paginated_response(self.paginate_queryset(self.serializer_class(documents, many=True).data))
